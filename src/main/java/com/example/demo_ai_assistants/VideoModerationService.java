@@ -85,6 +85,16 @@ public class VideoModerationService {
         public List<FrameAnalysis> getFrameAnalyses() { return frameAnalyses; }
         public void setFrameAnalyses(List<FrameAnalysis> frameAnalyses) { this.frameAnalyses = frameAnalyses; }
     }
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#x27;");
+    }
+
 
     /**
      * Main method để trả về response format mong muốn
@@ -94,23 +104,21 @@ public class VideoModerationService {
             VideoModerationResult result = moderateVideoDetailed(videoUrl);
 
             // Tạo response_fromai
-            String responseFromAi = String.format("Approved: %s\nDescription: %s",
+            String responseFromAi = String.format("Approved: %s<br/>Description: %s",
                     result.isApproved() ? "True" : "False",
                     result.getOverallReason());
 
-            // Tạo content string từ các frame analyses
+            // Tạo HTML content cho từng frame
             StringBuilder contentBuilder = new StringBuilder();
-            for (int i = 0; i < result.getFrameAnalyses().size(); i++) {
-                FrameAnalysis analysis = result.getFrameAnalyses().get(i);
-
-                if (i > 0) {
-                    contentBuilder.append(" ");
-                }
-
-                contentBuilder.append(String.format("Frame %d - %s: %s",
-                        analysis.getFrameNumber(),
-                        analysis.isApproved() ? "Phù hợp" : "Không phù hợp",
-                        analysis.getContent()));
+            for (FrameAnalysis analysis : result.getFrameAnalyses()) {
+                contentBuilder
+                        .append("<p><strong>Frame ")
+                        .append(analysis.getFrameNumber())
+                        .append(" - ")
+                        .append(analysis.isApproved() ? "Phù hợp" : "Không phù hợp")
+                        .append("</p>\n<p>")
+                        .append(escapeHtml(analysis.getContent()))
+                        .append("</p>\n");
             }
 
             // Tạo JSON response
@@ -122,19 +130,18 @@ public class VideoModerationService {
 
         } catch (Exception e) {
             log.error("Error creating custom format response: ", e);
-
-            // Fallback response
             Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("response_fromai", "Approved: False\nDescription: System error: " + e.getMessage());
-            errorResponse.put("content", "Cannot analyze the video due to a system error");
+            errorResponse.put("response_fromai", "Approved: False<br/>Description: System error: " + e.getMessage());
+            errorResponse.put("content", "<p>Cannot analyze the video due to a system error</p>");
 
             try {
                 return objectMapper.writeValueAsString(errorResponse);
             } catch (Exception jsonEx) {
-                return "{\"response_fromai\": \"Approved: False\\nDescription: System error\", \"content\": \"Cannot analyze video\"}";
+                return "{\"response_fromai\": \"Approved: False<br/>Description: System error\", \"content\": \"<p>Cannot analyze video</p>\"}";
             }
         }
     }
+
 
     /**
      * Core analysis method - đã được tối ưu
