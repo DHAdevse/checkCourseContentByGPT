@@ -103,22 +103,29 @@ public class VideoModerationService {
         try {
             VideoModerationResult result = moderateVideoDetailed(videoUrl);
 
-            // Tạo response_fromai
-            String responseFromAi = String.format("Approved: %s<br/>Description: %s",
+            // Màu cho response_fromai
+            String color = result.isApproved() ? "green" : "red";
+            String responseFromAi = String.format(
+                    "<span style='color:%s'><strong>Approved: %s</strong></span><br/>Description: %s",
+                    color,
                     result.isApproved() ? "True" : "False",
-                    result.getOverallReason());
+                    escapeHtml(result.getOverallReason())
+            );
 
-            // Tạo HTML content cho từng frame
+            // Tạo HTML content giống ảnh
             StringBuilder contentBuilder = new StringBuilder();
             for (FrameAnalysis analysis : result.getFrameAnalyses()) {
-                contentBuilder
-                        .append("<p><strong>Frame ")
+                contentBuilder.append("<ul>\n");
+                contentBuilder.append("<li><strong>Frame ")
                         .append(analysis.getFrameNumber())
-                        .append(" - ")
+                        .append(" : ")
                         .append(analysis.isApproved() ? "Phù hợp" : "Không phù hợp")
-                        .append("</p>\n<p>")
+                        .append("</strong>\n");
+
+                contentBuilder.append("<ul><li>")
                         .append(escapeHtml(analysis.getContent()))
-                        .append("</p>\n");
+                        .append("</li></ul></li>\n");
+                contentBuilder.append("</ul>\n");
             }
 
             // Tạo JSON response
@@ -131,13 +138,13 @@ public class VideoModerationService {
         } catch (Exception e) {
             log.error("Error creating custom format response: ", e);
             Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("response_fromai", "Approved: False<br/>Description: System error: " + e.getMessage());
+            errorResponse.put("response_fromai", "<span style='color:red'><strong>Approved: False</strong></span><br/>Description: System error: " + escapeHtml(e.getMessage()));
             errorResponse.put("content", "<p>Cannot analyze the video due to a system error</p>");
 
             try {
                 return objectMapper.writeValueAsString(errorResponse);
             } catch (Exception jsonEx) {
-                return "{\"response_fromai\": \"Approved: False<br/>Description: System error\", \"content\": \"<p>Cannot analyze video</p>\"}";
+                return "{\"response_fromai\": \"<span style='color:red'><strong>Approved: False</strong></span><br/>Description: System error\", \"content\": \"<p>Cannot analyze video</p>\"}";
             }
         }
     }
@@ -179,7 +186,7 @@ public class VideoModerationService {
 
             String finalReason = hasViolations ?
                     "Video chứa nội dung không phù hợp cho môi trường giáo dục" :
-                    String.format("Video phù hợp cho môi trường giáo dục - đã phân tích %d frames", frameBase64List.size());
+                    String.format("Video phù hợp cho môi trường giáo dục");
 
             return new VideoModerationResult(
                     !hasViolations,
