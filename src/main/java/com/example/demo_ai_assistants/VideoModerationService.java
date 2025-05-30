@@ -103,29 +103,38 @@ public class VideoModerationService {
         try {
             VideoModerationResult result = moderateVideoDetailed(videoUrl);
 
-            // Màu cho response_fromai
-            String color = result.isApproved() ? "green" : "red";
+            // Màu sắc tổng thể
+            String overallColor = result.isApproved() ? "green" : "red";
+
+            // Phần kết quả tổng quát
             String responseFromAi = String.format(
-                    "<span style='color:%s'><strong>Approved: %s</strong></span><br/>Description: %s",
-                    color,
+                    "<strong style='color:%s'>Approved: %s</strong><br/>Description: %s",
+                    overallColor,
                     result.isApproved() ? "True" : "False",
                     escapeHtml(result.getOverallReason())
             );
 
-            // Tạo HTML content giống ảnh
+            // Nội dung từng frame
             StringBuilder contentBuilder = new StringBuilder();
-            for (FrameAnalysis analysis : result.getFrameAnalyses()) {
-                contentBuilder.append("<ul>\n");
-                contentBuilder.append("<li><strong>Frame ")
-                        .append(analysis.getFrameNumber())
-                        .append(" : ")
-                        .append(analysis.isApproved() ? "Phù hợp" : "Không phù hợp")
-                        .append("</strong>\n");
 
-                contentBuilder.append("<ul><li>")
-                        .append(escapeHtml(analysis.getContent()))
-                        .append("</li></ul></li>\n");
-                contentBuilder.append("</ul>\n");
+            if (result.getFrameAnalyses().isEmpty()) {
+                contentBuilder.append("<p>Đã có lỗi xảy ra khi phân tích video - không thể trích xuất nội dung từ video</p>");
+            } else {
+                contentBuilder.append("<ul>\n");
+                for (FrameAnalysis analysis : result.getFrameAnalyses()) {
+                    String frameColor = analysis.isApproved() ? "green" : "red";
+                    String frameStatus = analysis.isApproved() ? "Phù hợp" : "Không phù hợp";
+
+                    contentBuilder
+                            .append("<li>\n")
+                            .append(String.format("<strong style='color:%s'>- Frame %d - %s:</strong>\n",
+                                    frameColor, analysis.getFrameNumber(), frameStatus))
+                            .append("<p>")
+                            .append(escapeHtml(analysis.getContent()))
+                            .append("</p>\n")
+                            .append("</li>\n");
+                }
+                contentBuilder.append("</ul>");
             }
 
             // Tạo JSON response
@@ -136,18 +145,19 @@ public class VideoModerationService {
             return objectMapper.writeValueAsString(response);
 
         } catch (Exception e) {
-            log.error("Error creating custom format response: ", e);
+            log.error("Error creating custom format response: {}", e.getMessage(), e);
             Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("response_fromai", "<span style='color:red'><strong>Approved: False</strong></span><br/>Description: System error: " + escapeHtml(e.getMessage()));
-            errorResponse.put("content", "<p>Cannot analyze the video due to a system error</p>");
+            errorResponse.put("response_fromai", "<strong style='color:red'>Approved: False</strong><br/>Description: Đã có lỗi xảy ra khi phân tích video - " + escapeHtml(e.getMessage()));
+            errorResponse.put("content", "<p>Đã có lỗi xảy ra khi phân tích video do lỗi hệ thống</p>");
 
             try {
                 return objectMapper.writeValueAsString(errorResponse);
             } catch (Exception jsonEx) {
-                return "{\"response_fromai\": \"<span style='color:red'><strong>Approved: False</strong></span><br/>Description: System error\", \"content\": \"<p>Cannot analyze video</p>\"}";
+                return "{\"response_fromai\": \"<strong style='color:red'>Approved: False</strong><br/>Description: Đã có lỗi xảy ra khi phân tích video\", \"content\": \"<p>Đã có lỗi xảy ra khi phân tích video</p>\"}";
             }
         }
     }
+
 
 
     /**
